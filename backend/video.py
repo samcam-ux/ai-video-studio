@@ -3,11 +3,12 @@ import os
 import replicate
 from typing import Optional
 
-# Default model: a fast, quality text-to-video model on Replicate.
+# Default model: LTX-Video — fast, cheap text-to-video on Replicate (~$0.05/video,
+# vs $0.50 for MiniMax which would lose money at $9/20 credits).
 # Swappable via REPLICATE_MODEL env var.
 DEFAULT_MODEL = os.environ.get(
     "REPLICATE_MODEL",
-    "stability-ai/stable-video-diffusion",
+    "lightricks/ltx-video",
 )
 
 # Video upscaler for enhancing generated clips.
@@ -79,17 +80,21 @@ def enhance_prompt(raw_prompt: str) -> str:
     except Exception:
         return raw_prompt
 
-def generate_video(prompt: str, duration: int = 5, aspect: str = "16:9") -> dict:
+def generate_video(prompt: str, duration: int = 5, aspect: str = "9:16") -> dict:
     """
     Kick off a video generation. Returns the prediction record.
     Replicate runs async; caller polls for completion.
+    LTX-Video takes frame counts: 129 frames ~ 5s, 257 frames ~ 10s.
     """
+    length = 257 if duration >= 10 else 129
     client = get_client()
     prediction = _create_prediction(
         DEFAULT_MODEL,
         input={
             "prompt": prompt,
-            "duration": duration,
+            "length": length,
+            "aspect_ratio": aspect,
+            "model": "0.9.1",
         },
     )
     return {"id": prediction.id, "status": prediction.status}
