@@ -10,6 +10,14 @@ DEFAULT_MODEL = os.environ.get(
     "stability-ai/stable-video-diffusion",
 )
 
+# Video upscaler for enhancing generated clips.
+# ByteDance vCube upscaler with 'aigc' scene preset (tuned for AI footage).
+# Swappable via UPSCALE_MODEL env var.
+UPSCALE_MODEL = os.environ.get(
+    "UPSCALE_MODEL",
+    "bytedance/vcube-upscaler",
+)
+
 # Hermes 3 (Nous Research LLM) for prompt enhancement.
 # Swappable via HERMES_MODEL env var.
 HERMES_MODEL = os.environ.get(
@@ -67,6 +75,23 @@ def generate_video(prompt: str, duration: int = 5, aspect: str = "16:9") -> dict
         input={
             "prompt": prompt,
             "duration": duration,
+        },
+    )
+    return {"id": prediction.id, "status": prediction.status}
+
+def upscale_video(video_url: str, target: str = "2K") -> dict:
+    """
+    Enhance/upscale a finished video via the ByteDance upscaler.
+    Uses the 'aigc' scene preset tuned for AI-generated footage.
+    Returns the prediction record; caller polls via get_status.
+    """
+    client = get_client()
+    prediction = client.predictions.create(
+        model=UPSCALE_MODEL,
+        input={
+            "video": video_url,
+            "scene": "aigc",
+            "resolution": target,
         },
     )
     return {"id": prediction.id, "status": prediction.status}

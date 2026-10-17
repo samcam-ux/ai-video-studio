@@ -105,6 +105,38 @@ def status(prediction_id: str, authorization: str | None = Header(default=None))
                 v["url"] = out
     return s
 
+# ---- Upscale / enhance ----
+UPSCALE_COST = 2
+
+class UpscaleIn(BaseModel):
+    prediction_id: str
+    target: str = "2K"
+
+@app.post("/api/upscale")
+def upscale(body: UpscaleIn, authorization: str | None = Header(default=None)):
+    user = _user_or_401(authorization)
+    # find the source video
+    src = next((v for v in user["videos"] if v.get("prediction_id") == body.prediction_id and v.get("url")), None)
+    if not src:
+        raise HTTPException(404, "Finished video not found")
+    # charge credits (all-or-nothing)
+    charged = 0
+    for _ in range(UPSCALE_COST):
+        if not auth.spend_credit(user["email"]):
+            break
+        charged += 1
+    if charged < UPSCALE_COST:
+        auth.add_credits(user["email"], charged)  # refund partial
+        raise HTTPException(402, f"Enhancing costs {UPSCALE_COST} credits")
+    try:
+        pred = video_gen.upscale_video(src["url"], target=body.target)
+    except Exception as e:
+        auth.add_credits(user["email"], UPSCALE_COST)
+        raise HTTPException(502, f"Upscale provider error: {e}")
+    video = {"prompt": f"✨ Enhanced: {src['prompt']}", "prediction_id": pred["id"], "status": pred["status"], "url": None, "enhanced_from": src["prediction_id"]}
+    auth.add_video(user["email"], video)
+    return {"prediction_id": pred["id"], "status": pred["status"], "credits": user["credits"]}
+
 # ---- Billing ----
 @app.post("/api/checkout")
 def checkout(authorization: str | None = Header(default=None)):

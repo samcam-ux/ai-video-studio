@@ -85,7 +85,7 @@ async function refresh() {
   [...j.videos].reverse().forEach(v => {
     const d = document.createElement('div');
     d.className = 'video-item card';
-    if (v.url) d.innerHTML = `<video src="${v.url}" controls playsinline></video><p>${esc(v.prompt)}</p>` + (v.enhanced_prompt && v.enhanced_prompt !== v.prompt ? `<p style="font-size:12px;color:#777">✨ ${esc(v.enhanced_prompt)}</p>` : '');
+    if (v.url) d.innerHTML = `<video src="${v.url}" controls playsinline></video><p>${esc(v.prompt)}</p>` + (v.enhanced_prompt && v.enhanced_prompt !== v.prompt ? `<p style="font-size:12px;color:#777">✨ ${esc(v.enhanced_prompt)}</p>` : '') + (v.enhanced_from ? '' : `<button class="secondary" style="margin-top:8px;font-size:13px;padding:8px 14px" onclick="upscale('${v.prediction_id}')">⬆️ Enhance to 4K (2 credits)</button><p id="up-${v.prediction_id}" style="font-size:12px;color:#f66"></p>`);
     else d.innerHTML = `<p>${esc(v.prompt)}</p><p class="status" data-pid="${v.prediction_id}">⏳ ${esc(v.status||'rendering')}…</p>`;
     wrap.appendChild(d);
   });
@@ -126,6 +126,13 @@ async function generate(){
 async function buyCredits(){
   const {ok, j} = await api('/api/checkout', {method:'POST'});
   if (ok && j.url) location.href = j.url;
+}
+async function upscale(pid){
+  const err = document.getElementById('up-'+pid);
+  err.textContent = 'Enhancing… (takes a few minutes)';
+  const {ok, j} = await api('/api/upscale', {method:'POST', body: JSON.stringify({prediction_id: pid, target: '4K'})});
+  if (!ok) { err.textContent = j.detail || 'Error'; return; }
+  refresh();
 }
 if (token) refresh(); else showAuth();
 </script>
