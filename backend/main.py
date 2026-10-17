@@ -63,6 +63,7 @@ def me(authorization: str | None = Header(default=None)):
 class GenIn(BaseModel):
     prompt: str
     duration: int = 5
+    enhance: bool = True
 
 @app.post("/api/generate")
 def generate(body: GenIn, authorization: str | None = Header(default=None)):
@@ -71,8 +72,10 @@ def generate(body: GenIn, authorization: str | None = Header(default=None)):
         raise HTTPException(400, "Prompt is required")
     if not auth.spend_credit(user["email"]):
         raise HTTPException(402, "No credits left — buy more to continue")
+    raw = body.prompt.strip()
+    final_prompt = video_gen.enhance_prompt(raw) if body.enhance else raw
     try:
-        pred = video_gen.generate_video(body.prompt.strip(), duration=body.duration)
+        pred = video_gen.generate_video(final_prompt, duration=body.duration)
     except RuntimeError as e:
         # refund the credit if we couldn't even start
         auth.add_credits(user["email"], 1)
@@ -80,7 +83,7 @@ def generate(body: GenIn, authorization: str | None = Header(default=None)):
     except Exception as e:
         auth.add_credits(user["email"], 1)
         raise HTTPException(502, f"Video provider error: {e}")
-    video = {"prompt": body.prompt.strip(), "prediction_id": pred["id"], "status": pred["status"], "url": None}
+    video = {"prompt": raw, "enhanced_prompt": final_prompt, "prediction_id": pred["id"], "status": pred["status"], "url": None}
     auth.add_video(user["email"], video)
     return {"prediction_id": pred["id"], "status": pred["status"], "credits": user["credits"]}
 

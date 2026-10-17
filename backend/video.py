@@ -10,11 +10,51 @@ DEFAULT_MODEL = os.environ.get(
     "stability-ai/stable-video-diffusion",
 )
 
+# Hermes 3 (Nous Research LLM) for prompt enhancement.
+# Swappable via HERMES_MODEL env var.
+HERMES_MODEL = os.environ.get(
+    "HERMES_MODEL",
+    "nousresearch/hermes-3-llama-3.1-405b",
+)
+
+ENHANCE_SYSTEM = (
+    "You are a cinematic prompt engineer for AI video generation. "
+    "Expand the user's short idea into one vivid, detailed video prompt: "
+    "describe the subject, setting, lighting, camera movement, mood, and style. "
+    "Output ONLY the enhanced prompt, no preamble or explanation. "
+    "Keep it under 120 words."
+)
+
 def get_client() -> replicate.Client:
     token = os.environ.get("REPLICATE_API_TOKEN")
     if not token:
         raise RuntimeError("REPLICATE_API_TOKEN not set")
     return replicate.Client(api_token=token)
+
+def enhance_prompt(raw_prompt: str) -> str:
+    """
+    Use Hermes 3 to expand a short user prompt into a detailed
+    cinematic video prompt. Falls back to the raw prompt on any error.
+    """
+    try:
+        client = get_client()
+        output = client.run(
+            HERMES_MODEL,
+            input={
+                "prompt": raw_prompt,
+                "system_prompt": ENHANCE_SYSTEM,
+                "max_tokens": 300,
+                "temperature": 0.7,
+            },
+        )
+        # output may be a list of tokens or a string
+        if isinstance(output, list):
+            text = "".join(output).strip()
+        else:
+            text = str(output).strip()
+        return text or raw_prompt
+    except Exception:
+        return raw_prompt
 
 def generate_video(prompt: str, duration: int = 5, aspect: str = "16:9") -> dict:
     """
