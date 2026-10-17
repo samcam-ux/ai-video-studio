@@ -3,12 +3,12 @@ import os
 import replicate
 from typing import Optional
 
-# Default model: LTX-Video — fast, cheap text-to-video on Replicate (~$0.05/video,
-# vs $0.50 for MiniMax which would lose money at $9/20 credits).
+# Default model: PixVerse v4.5 — true text-to-video, good quality, ~$0.01/video
+# (LTX was cheap but poor quality; MiniMax/Kling were too pricey or image-to-video).
 # Swappable via REPLICATE_MODEL env var.
 DEFAULT_MODEL = os.environ.get(
     "REPLICATE_MODEL",
-    "lightricks/ltx-video",
+    "pixverse/pixverse-v4.5",
 )
 
 # Video upscaler for enhancing generated clips.
@@ -84,17 +84,17 @@ def generate_video(prompt: str, duration: int = 5, aspect: str = "9:16") -> dict
     """
     Kick off a video generation. Returns the prediction record.
     Replicate runs async; caller polls for completion.
-    LTX-Video takes frame counts: 129 frames ~ 5s, 257 frames ~ 10s.
+    PixVerse v4.5 takes duration in seconds (5 or 8).
     """
-    length = 257 if duration >= 10 else 129
+    dur = 8 if duration >= 10 else 5
     client = get_client()
     prediction = _create_prediction(
         DEFAULT_MODEL,
         input={
             "prompt": prompt,
-            "length": length,
+            "duration": dur,
             "aspect_ratio": aspect,
-            "model": "0.9.1",
+            "quality": "720p",
         },
     )
     return {"id": prediction.id, "status": prediction.status}
