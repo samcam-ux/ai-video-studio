@@ -107,6 +107,7 @@ def status(prediction_id: str, authorization: str | None = Header(default=None))
 
 # ---- Upscale / enhance ----
 UPSCALE_COST = 2
+DIALOGUE_COST = 2
 
 class UpscaleIn(BaseModel):
     prediction_id: str
@@ -134,6 +135,39 @@ def upscale(body: UpscaleIn, authorization: str | None = Header(default=None)):
         auth.add_credits(user["email"], UPSCALE_COST)
         raise HTTPException(502, f"Upscale provider error: {e}")
     video = {"prompt": f"✨ Enhanced: {src['prompt']}", "prediction_id": pred["id"], "status": pred["status"], "url": None, "enhanced_from": src["prediction_id"]}
+    auth.add_video(user["email"], video)
+    return {"prediction_id": pred["id"], "status": pred["status"], "credits": user["credits"]}
+
+# ---- Dialogue (TTS + lip-sync) ----
+class DialogueIn(BaseModel):
+    prediction_id: str
+    text: str
+
+@app.post("/api/dialogue")
+def dialogue(body: DialogueIn, authorization: str | None = Header(default=None)):
+    user = _user_or_401(authorization)
+    if not body.text.strip():
+        raise HTTPException(400, "Dialogue text is required")
+    if len(body.text) > 300:
+        raise HTTPException(400, "Dialogue too long (300 chars max)")
+    src = next((v for v in user["videos"] if v.get("prediction_id") == body.prediction_id and v.get("url")), None)
+    if not src:
+        raise HTTPException(404, "Finished video not found")
+    # charge credits (all-or-nothing)
+    charged = 0
+    for _ in range(DIALOGUE_COST):
+        if not auth.spend_credit(user["email"]):
+            break
+        charged += 1
+    if charged < DIALOGUE_COST:
+        auth.add_credits(user["email"], charged)  # refund partial
+        raise HTTPException(402, f"Dialogue costs {DIALOGUE_COST} credits")
+    try:
+        pred = video_gen.add_dialogue(src["url"], body.text.strip())
+    except Exception as e:
+        auth.add_credits(user["email"], DIALOGUE_COST)
+        raise HTTPException(502, f"Dialogue provider error: {e}")
+    video = {"prompt": f"🗣️ {src['prompt']}", "dialogue": body.text.strip(), "prediction_id": pred["id"], "status": pred["status"], "url": None, "dialogue_from": src["prediction_id"]}
     auth.add_video(user["email"], video)
     return {"prediction_id": pred["id"], "status": pred["status"], "credits": user["credits"]}
 

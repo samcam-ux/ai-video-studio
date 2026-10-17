@@ -79,6 +79,17 @@ def generate_video(prompt: str, duration: int = 5, aspect: str = "16:9") -> dict
     )
     return {"id": prediction.id, "status": prediction.status}
 
+# TTS + lip-sync for adding dialogue to finished videos.
+# Swappable via TTS_MODEL / LIPSYNC_MODEL env vars.
+TTS_MODEL = os.environ.get(
+    "TTS_MODEL",
+    "suno-ai/bark",
+)
+LIPSYNC_MODEL = os.environ.get(
+    "LIPSYNC_MODEL",
+    "devxpy/cog-wav2lip",
+)
+
 def upscale_video(video_url: str, target: str = "2K") -> dict:
     """
     Enhance/upscale a finished video via the ByteDance upscaler.
@@ -106,3 +117,27 @@ def get_status(prediction_id: str) -> dict:
         "error": p.error,
     }
     return out
+
+def add_dialogue(video_url: str, text: str) -> dict:
+    """
+    Two-step: TTS the dialogue text, then lip-sync it onto the video.
+    Returns the lip-sync prediction record; caller polls via get_status.
+    """
+    client = get_client()
+    # Step 1: text to speech
+    tts = client.predictions.create(
+        model=TTS_MODEL,
+        input={"prompt": text},
+    )
+    tts = client.predictions.wait(tts.id)
+    if tts.status != "succeeded":
+        raise RuntimeError(f"TTS failed: {tts.error}")
+    audio_url = tts.output if isinstance(tts.output, str) else (tts.output or [None])[0]
+    if not audio_url:
+        raise RuntimeError("TTS produced no audio")
+    # Step 2: lip-sync audio onto video
+    lip = client.predictions.create(
+        model=LIPSYNC_MODEL,
+        input={"video": video_url, "audio": audio_url},
+    )
+    return {"id": lip.id, "status": lip.status}
