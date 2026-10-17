@@ -13,12 +13,14 @@ APP_URL = os.environ.get("APP_URL", "http://localhost:8000")
 
 app = FastAPI(title="AI Video Studio")
 
-# Serve frontend
-app.mount("/static", StaticFiles(directory="frontend"), name="static")
+# Serve frontend — resolve relative to this file so it works regardless of WORKDIR
+_BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_FRONTEND = os.path.join(_BASE, "frontend")
+app.mount("/static", StaticFiles(directory=_FRONTEND), name="static")
 
 @app.get("/", response_class=HTMLResponse)
 def index():
-    with open("frontend/index.html") as f:
+    with open(os.path.join(_FRONTEND, "index.html")) as f:
         return f.read()
 
 @app.get("/api/health")
