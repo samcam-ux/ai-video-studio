@@ -39,6 +39,21 @@ def get_client() -> replicate.Client:
         raise RuntimeError("REPLICATE_API_TOKEN not set")
     return replicate.Client(api_token=token)
 
+_version_cache: dict[str, str] = {}
+
+def _create_prediction(model_name: str, input: dict):
+    """
+    Create a prediction by resolving the model's latest version first.
+    (The installed replicate client requires a version hash, not a name.)
+    """
+    client = get_client()
+    version = _version_cache.get(model_name)
+    if not version:
+        model = client.models.get(model_name)
+        version = model.latest_version.id
+        _version_cache[model_name] = version
+    return client.predictions.create(version=version, input=input)
+
 def enhance_prompt(raw_prompt: str) -> str:
     """
     Use Hermes 3 to expand a short user prompt into a detailed
@@ -70,8 +85,8 @@ def generate_video(prompt: str, duration: int = 5, aspect: str = "16:9") -> dict
     Replicate runs async; caller polls for completion.
     """
     client = get_client()
-    prediction = client.predictions.create(
-        model=DEFAULT_MODEL,
+    prediction = _create_prediction(
+        DEFAULT_MODEL,
         input={
             "prompt": prompt,
             "duration": duration,
@@ -97,8 +112,8 @@ def upscale_video(video_url: str, target: str = "2K") -> dict:
     Returns the prediction record; caller polls via get_status.
     """
     client = get_client()
-    prediction = client.predictions.create(
-        model=UPSCALE_MODEL,
+    prediction = _create_prediction(
+        UPSCALE_MODEL,
         input={
             "video": video_url,
             "scene": "aigc",
@@ -173,10 +188,7 @@ def add_dialogue(video_url: str, text: str) -> dict:
     """
     client = get_client()
     # Step 1: text to speech
-    tts = client.predictions.create(
-        model=TTS_MODEL,
-        input={"prompt": text},
-    )
+    tts = _create_prediction(TTS_MODEL, input={"prompt": text})
     tts = client.predictions.wait(tts.id)
     if tts.status != "succeeded":
         raise RuntimeError(f"TTS failed: {tts.error}")
@@ -184,8 +196,5 @@ def add_dialogue(video_url: str, text: str) -> dict:
     if not audio_url:
         raise RuntimeError("TTS produced no audio")
     # Step 2: lip-sync audio onto video
-    lip = client.predictions.create(
-        model=LIPSYNC_MODEL,
-        input={"video": video_url, "audio": audio_url},
-    )
+    lip = _create_prediction(LIPSYNC_MODEL, input={"video": video_url, "audio": audio_url})
     return {"id": lip.id, "status": lip.status}
