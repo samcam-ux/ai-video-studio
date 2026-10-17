@@ -1,53 +1,220 @@
-"""Simple token auth with per-user credits."""
+"""SQLite-backed auth with per-user credits.
+
+DB lives at $DATA_DIR/app.db. On Railway, mount a persistent Volume at /data
+and set DATA_DIR=/data so accounts survive redeploys.
+"""
+import hashlib
+import json
+import os
 import secrets
-from typing import Dict, Optional
+import sqlite3
+import threading
+import time
 
-# In-memory store. Swap for a real DB in production.
-_users: Dict[str, dict] = {}
-_sessions: Dict[str, str] = {}  # token -> email
+DATA_DIR = os.environ.get("DATA_DIR", os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(DATA_DIR, "app.db")
 
+_lock = threading.Lock()
 FREE_CREDITS = 3
 
-def register(email: str, password: str) -> dict:
-    if email in _users:
-        raise ValueError("Account already exists")
-    _users[email] = {
-        "email": email,
-        "password": password,  # NOTE: hash in production
-        "credits": FREE_CREDITS,
-        "videos": [],
+
+def _db():
+    os.makedirs(DATA_DIR, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _init():
+    with _lock:
+        db = _db()
+        db.executescript("""
+        CREATE TABLE IF NOT EXISTS users (
+            email TEXT PRIMARY KEY,
+            pw_hash TEXT NOT NULL,
+            salt TEXT NOT NULL,
+            credits INTEGER NOT NULL DEFAULT 3,
+            created_at REAL NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS sessions (
+            token TEXT PRIMARY KEY,
+            email TEXT NOT NULL,
+            created_at REAL NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS videos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL,
+            data TEXT NOT NULL,
+            created_at REAL NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_videos_email ON videos(email);
+        """)
+        db.commit()
+        db.close()
+
+
+_init()
+
+
+def _hash(password: str, salt: str) -> str:
+    return hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 200_000).hex()
+
+
+def _get_user_row(email):
+    db = _db()
+    try:
+        return db.execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
+    finally:
+        db.close()
+
+
+def _videos_for(email):
+    db = _db()
+    try:
+        rows = db.execute("SELECT data FROM videos WHERE email=? ORDER BY id", (email,)).fetchall()
+        return [json.loads(r["data"]) for r in rows]
+    finally:
+        db.close()
+
+
+def _user_dict(row):
+    return {
+        "email": row["email"],
+        "credits": row["credits"],
+        "videos": _videos_for(row["email"]),
     }
+
+
+def register(email: str, password: str) -> dict:
+    email = email.strip().lower()
+    if not email or not password:
+        raise ValueError("Email and password required")
+    if _get_user_row(email):
+        raise ValueError("Account already exists")
+    salt = secrets.token_hex(16)
     token = secrets.token_hex(32)
-    _sessions[token] = email
+    with _lock:
+        db = _db()
+        try:
+            db.execute(
+                "INSERT INTO users (email, pw_hash, salt, credits, created_at) VALUES (?,?,?,?,?)",
+                (email, _hash(password, salt), salt, FREE_CREDITS, time.time()),
+            )
+            db.execute(
+                "INSERT INTO sessions (token, email, created_at) VALUES (?,?,?)",
+                (token, email, time.time()),
+            )
+            db.commit()
+        finally:
+            db.close()
     return {"token": token, "credits": FREE_CREDITS}
 
+
 def login(email: str, password: str) -> dict:
-    u = _users.get(email)
-    if not u or u["password"] != password:
+    email = email.strip().lower()
+    row = _get_user_row(email)
+    if not row or _hash(password, row["salt"]) != row["pw_hash"]:
         raise ValueError("Invalid login")
     token = secrets.token_hex(32)
-    _sessions[token] = email
-    return {"token": token, "credits": u["credits"]}
+    with _lock:
+        db = _db()
+        try:
+            db.execute(
+                "INSERT INTO sessions (token, email, created_at) VALUES (?,?,?)",
+                (token, email, time.time()),
+            )
+            db.commit()
+        finally:
+            db.close()
+    return {"token": token, "credits": row["credits"]}
 
-def get_user(token: str) -> Optional[dict]:
-    email = _sessions.get(token)
-    if not email:
+
+def get_user(token: str):
+    if not token:
         return None
-    return _users.get(email)
+    db = _db()
+    try:
+        s = db.execute("SELECT email FROM sessions WHERE token=?", (token,)).fetchone()
+    finally:
+        db.close()
+    if not s:
+        return None
+    row = _get_user_row(s["email"])
+    if not row:
+        return None
+    return _user_dict(row)
+
 
 def spend_credit(email: str) -> bool:
-    u = _users.get(email)
-    if not u or u["credits"] <= 0:
-        return False
-    u["credits"] -= 1
-    return True
+    with _lock:
+        db = _db()
+        try:
+            row = db.execute("SELECT credits FROM users WHERE email=?", (email,)).fetchone()
+            if not row or row["credits"] <= 0:
+                return False
+            db.execute("UPDATE users SET credits = credits - 1 WHERE email=?", (email,))
+            db.commit()
+            return True
+        finally:
+            db.close()
+
 
 def add_credits(email: str, n: int):
-    u = _users.get(email)
-    if u:
-        u["credits"] += n
+    with _lock:
+        db = _db()
+        try:
+            db.execute("UPDATE users SET credits = credits + ? WHERE email=?", (n, email))
+            db.commit()
+        finally:
+            db.close()
+
 
 def add_video(email: str, video: dict):
-    u = _users.get(email)
-    if u:
-        u["videos"].append(video)
+    with _lock:
+        db = _db()
+        try:
+            db.execute(
+                "INSERT INTO videos (email, data, created_at) VALUES (?,?,?)",
+                (email, json.dumps(video), time.time()),
+            )
+            db.commit()
+        finally:
+            db.close()
+
+
+def update_video(email: str, prediction_id: str, updates: dict):
+    """Merge updates into the stored video record. Returns the updated dict or None."""
+    with _lock:
+        db = _db()
+        try:
+            rows = db.execute("SELECT id, data FROM videos WHERE email=?", (email,)).fetchall()
+            for r in rows:
+                d = json.loads(r["data"])
+                if d.get("prediction_id") == prediction_id:
+                    d.update(updates)
+                    db.execute("UPDATE videos SET data=? WHERE id=?", (json.dumps(d), r["id"]))
+                    db.commit()
+                    return d
+            return None
+        finally:
+            db.close()
+
+
+def refund_if_failed(email: str, prediction_id: str) -> bool:
+    """Refund the video's credit cost if it failed and wasn't refunded yet."""
+    with _lock:
+        db = _db()
+        try:
+            rows = db.execute("SELECT id, data FROM videos WHERE email=?", (email,)).fetchall()
+            for r in rows:
+                d = json.loads(r["data"])
+                if d.get("prediction_id") == prediction_id and not d.get("refunded"):
+                    cost = d.get("cost", 1)
+                    d["refunded"] = True
+                    db.execute("UPDATE videos SET data=? WHERE id=?", (json.dumps(d), r["id"]))
+                    db.execute("UPDATE users SET credits = credits + ? WHERE email=?", (cost, email))
+                    db.commit()
+                    return True
+            return False
+        finally:
+            db.close()

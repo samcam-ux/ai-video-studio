@@ -88,7 +88,7 @@ def generate(body: GenIn, authorization: str | None = Header(default=None)):
     except Exception as e:
         auth.add_credits(user["email"], 1)
         raise HTTPException(502, f"Video provider error: {e}")
-    video = {"prompt": raw, "enhanced_prompt": final_prompt, "prediction_id": pred["id"], "status": pred["status"], "url": None}
+    video = {"prompt": raw, "enhanced_prompt": final_prompt, "prediction_id": pred["id"], "status": pred["status"], "url": None, "cost": 1}
     auth.add_video(user["email"], video)
     return {"prediction_id": pred["id"], "status": pred["status"], "credits": user["credits"]}
 
@@ -99,15 +99,17 @@ def status(prediction_id: str, authorization: str | None = Header(default=None))
         s = video_gen.get_status(prediction_id)
     except Exception as e:
         raise HTTPException(502, f"Video provider error: {e}")
-    # update stored video
-    for v in user["videos"]:
-        if v.get("prediction_id") == prediction_id:
-            v["status"] = s["status"]
-            out = s.get("output")
-            if isinstance(out, list) and out:
-                v["url"] = out[0]
-            elif isinstance(out, str):
-                v["url"] = out
+    # update stored video (persisted)
+    updates = {"status": s["status"]}
+    out = s.get("output")
+    if isinstance(out, list) and out:
+        updates["url"] = out[0]
+    elif isinstance(out, str):
+        updates["url"] = out
+    auth.update_video(user["email"], prediction_id, updates)
+    # refund if the provider failed this generation
+    if s["status"] == "failed":
+        auth.refund_if_failed(user["email"], prediction_id)
     return s
 
 # ---- Upscale / enhance ----
@@ -139,7 +141,7 @@ def upscale(body: UpscaleIn, authorization: str | None = Header(default=None)):
     except Exception as e:
         auth.add_credits(user["email"], UPSCALE_COST)
         raise HTTPException(502, f"Upscale provider error: {e}")
-    video = {"prompt": f"✨ Enhanced: {src['prompt']}", "prediction_id": pred["id"], "status": pred["status"], "url": None, "enhanced_from": src["prediction_id"]}
+    video = {"prompt": f"✨ Enhanced: {src['prompt']}", "prediction_id": pred["id"], "status": pred["status"], "url": None, "enhanced_from": src["prediction_id"], "cost": UPSCALE_COST}
     auth.add_video(user["email"], video)
     return {"prediction_id": pred["id"], "status": pred["status"], "credits": user["credits"]}
 
@@ -172,7 +174,7 @@ def dialogue(body: DialogueIn, authorization: str | None = Header(default=None))
     except Exception as e:
         auth.add_credits(user["email"], DIALOGUE_COST)
         raise HTTPException(502, f"Dialogue provider error: {e}")
-    video = {"prompt": f"🗣️ {src['prompt']}", "dialogue": body.text.strip(), "prediction_id": pred["id"], "status": pred["status"], "url": None, "dialogue_from": src["prediction_id"]}
+    video = {"prompt": f"🗣️ {src['prompt']}", "dialogue": body.text.strip(), "prediction_id": pred["id"], "status": pred["status"], "url": None, "dialogue_from": src["prediction_id"], "cost": DIALOGUE_COST}
     auth.add_video(user["email"], video)
     return {"prediction_id": pred["id"], "status": pred["status"], "credits": user["credits"]}
 
@@ -201,7 +203,7 @@ def combine(body: CombineIn, authorization: str | None = Header(default=None)):
         auth.add_credits(user["email"], COMBINE_COST)
         raise HTTPException(502, f"Combine failed: {e}")
     url = APP_URL.rstrip("/") + path
-    video = {"prompt": f"🎬 Combined ({len(clips)} clips): " + clips[0]["prompt"], "prediction_id": f"combined-{path.split('-')[-1].split('.')[0]}", "status": "succeeded", "url": url, "combined_from": [c["prediction_id"] for c in clips]}
+    video = {"prompt": f"🎬 Combined ({len(clips)} clips): " + clips[0]["prompt"], "prediction_id": f"combined-{path.split('-')[-1].split('.')[0]}", "status": "succeeded", "url": url, "combined_from": [c["prediction_id"] for c in clips], "cost": COMBINE_COST}
     auth.add_video(user["email"], video)
     return {"url": url, "credits": user["credits"]}
 
