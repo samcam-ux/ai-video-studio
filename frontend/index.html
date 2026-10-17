@@ -85,10 +85,20 @@ async function refresh() {
   [...j.videos].reverse().forEach(v => {
     const d = document.createElement('div');
     d.className = 'video-item card';
-    if (v.url) d.innerHTML = `<video src="${v.url}" controls playsinline></video><p>${esc(v.prompt)}</p>` + (v.enhanced_prompt && v.enhanced_prompt !== v.prompt ? `<p style="font-size:12px;color:#777">✨ ${esc(v.enhanced_prompt)}</p>` : '') + (v.dialogue ? `<p style="font-size:12px;color:#777">🗣️ "${esc(v.dialogue)}"</p>` : '') + (v.enhanced_from || v.dialogue_from ? '' : `<button class="secondary" style="margin-top:8px;font-size:13px;padding:8px 14px" onclick="upscale('${v.prediction_id}')">⬆️ Enhance to 4K (2 credits)</button><p id="up-${v.prediction_id}" style="font-size:12px;color:#f66"></p><div style="margin-top:8px"><input id="dg-${v.prediction_id}" placeholder="Dialogue for character to speak…" style="font-size:13px;padding:8px"><button class="secondary" style="font-size:13px;padding:8px 14px" onclick="addDialogue('${v.prediction_id}')">🗣️ Add dialogue (2 credits)</button><p id="dgerr-${v.prediction_id}" style="font-size:12px;color:#f66"></p></div>`);
+    if (v.url) d.innerHTML = `<video src="${v.url}" controls playsinline></video><p>${esc(v.prompt)}</p>` + (v.enhanced_prompt && v.enhanced_prompt !== v.prompt ? `<p style="font-size:12px;color:#777">✨ ${esc(v.enhanced_prompt)}</p>` : '') + (v.dialogue ? `<p style="font-size:12px;color:#777">🗣️ "${esc(v.dialogue)}"</p>` : '') + (v.enhanced_from || v.dialogue_from || v.combined_from ? '' : `<label style="font-size:13px;display:flex;align-items:center;gap:6px;margin-top:8px"><input type="checkbox" class="combine-check" value="${v.prediction_id}"> Select for combine</label><button class="secondary" style="margin-top:8px;font-size:13px;padding:8px 14px" onclick="upscale('${v.prediction_id}')">⬆️ Enhance to 4K (2 credits)</button><p id="up-${v.prediction_id}" style="font-size:12px;color:#f66"></p><div style="margin-top:8px"><input id="dg-${v.prediction_id}" placeholder="Dialogue for character to speak…" style="font-size:13px;padding:8px"><button class="secondary" style="font-size:13px;padding:8px 14px" onclick="addDialogue('${v.prediction_id}')">🗣️ Add dialogue (2 credits)</button><p id="dgerr-${v.prediction_id}" style="font-size:12px;color:#f66"></p></div>`);
     else d.innerHTML = `<p>${esc(v.prompt)}</p><p class="status" data-pid="${v.prediction_id}">⏳ ${esc(v.status||'rendering')}…</p>`;
     wrap.appendChild(d);
   });
+  // combine bar
+  let cbar = document.getElementById('combineBar');
+  if (!cbar) {
+    cbar = document.createElement('div');
+    cbar.id = 'combineBar';
+    cbar.className = 'card';
+    cbar.style.cssText = 'margin-top:16px;text-align:center';
+    wrap.after(cbar);
+  }
+  cbar.innerHTML = `<button onclick="combineSelected()">🎬 Combine selected into one video (1 credit)</button><p id="combineErr" style="font-size:12px;color:#f66"></p><p style="font-size:12px;color:#777">Pick 2–4 clips above, in order. They'll be stitched end-to-end.</p>`;
   document.querySelectorAll('[data-pid]').forEach(el => poll(el.dataset.pid, el));
 }
 async function poll(pid, el) {
@@ -140,6 +150,15 @@ async function addDialogue(pid){
   if (!text.trim()) { err.textContent = 'Type something for them to say.'; return; }
   err.textContent = 'Generating speech + lip-sync… (takes a few minutes)';
   const {ok, j} = await api('/api/dialogue', {method:'POST', body: JSON.stringify({prediction_id: pid, text})});
+  if (!ok) { err.textContent = j.detail || 'Error'; return; }
+  refresh();
+}
+async function combineSelected(){
+  const ids = [...document.querySelectorAll('.combine-check:checked')].map(c => c.value);
+  const err = document.getElementById('combineErr');
+  if (ids.length < 2 || ids.length > 4) { err.textContent = 'Select 2 to 4 clips.'; return; }
+  err.textContent = 'Stitching clips together…';
+  const {ok, j} = await api('/api/combine', {method:'POST', body: JSON.stringify({prediction_ids: ids})});
   if (!ok) { err.textContent = j.detail || 'Error'; return; }
   refresh();
 }

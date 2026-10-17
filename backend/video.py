@@ -118,6 +118,54 @@ def get_status(prediction_id: str) -> dict:
     }
     return out
 
+import subprocess
+import tempfile
+import urllib.request
+import uuid
+
+MEDIA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "media")
+os.makedirs(MEDIA_DIR, exist_ok=True)
+
+def combine_videos(video_urls: list[str]) -> str:
+    """
+    Stitch 2-4 clips end-to-end with ffmpeg (re-encoded to normalize).
+    Returns the public /media/ URL path of the combined file.
+    """
+    if not 2 <= len(video_urls) <= 4:
+        raise ValueError("Combine 2 to 4 clips")
+    tmpdir = tempfile.mkdtemp()
+    parts = []
+    try:
+        for i, url in enumerate(video_urls):
+            p = os.path.join(tmpdir, f"part{i}.mp4")
+            urllib.request.urlretrieve(url, p)
+            parts.append(p)
+        # concat demuxer needs same codecs -> re-encode each to h264/aac first
+        normed = []
+        for i, p in enumerate(parts):
+            n = os.path.join(tmpdir, f"norm{i}.mp4")
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", p, "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                 "-c:a", "aac", "-shortest", n],
+                check=True, capture_output=True,
+            )
+            normed.append(n)
+        lst = os.path.join(tmpdir, "list.txt")
+        with open(lst, "w") as f:
+            for n in normed:
+                f.write(f"file '{n}'\n")
+        out_name = f"combined-{uuid.uuid4().hex[:8]}.mp4"
+        out_path = os.path.join(MEDIA_DIR, out_name)
+        subprocess.run(
+            ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", lst,
+             "-c", "copy", out_path],
+            check=True, capture_output=True,
+        )
+        return f"/media/{out_name}"
+    finally:
+        import shutil
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
 def add_dialogue(video_url: str, text: str) -> dict:
     """
     Two-step: TTS the dialogue text, then lip-sync it onto the video.

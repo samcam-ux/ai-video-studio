@@ -18,6 +18,11 @@ _BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _FRONTEND = os.path.join(_BASE, "frontend")
 app.mount("/static", StaticFiles(directory=_FRONTEND), name="static")
 
+# Served combined/stitched videos
+_MEDIA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "media")
+os.makedirs(_MEDIA, exist_ok=True)
+app.mount("/media", StaticFiles(directory=_MEDIA), name="media")
+
 @app.get("/", response_class=HTMLResponse)
 def index():
     with open(os.path.join(_FRONTEND, "index.html")) as f:
@@ -170,6 +175,35 @@ def dialogue(body: DialogueIn, authorization: str | None = Header(default=None))
     video = {"prompt": f"🗣️ {src['prompt']}", "dialogue": body.text.strip(), "prediction_id": pred["id"], "status": pred["status"], "url": None, "dialogue_from": src["prediction_id"]}
     auth.add_video(user["email"], video)
     return {"prediction_id": pred["id"], "status": pred["status"], "credits": user["credits"]}
+
+# ---- Combine clips into longer video ----
+COMBINE_COST = 1
+
+class CombineIn(BaseModel):
+    prediction_ids: list[str]
+
+@app.post("/api/combine")
+def combine(body: CombineIn, authorization: str | None = Header(default=None)):
+    user = _user_or_401(authorization)
+    if not 2 <= len(body.prediction_ids) <= 4:
+        raise HTTPException(400, "Pick 2 to 4 clips to combine")
+    clips = []
+    for pid in body.prediction_ids:
+        v = next((x for x in user["videos"] if x.get("prediction_id") == pid and x.get("url")), None)
+        if not v:
+            raise HTTPException(404, f"Finished video not found: {pid}")
+        clips.append(v)
+    if not auth.spend_credit(user["email"]):
+        raise HTTPException(402, f"Combining costs {COMBINE_COST} credit")
+    try:
+        path = video_gen.combine_videos([c["url"] for c in clips])
+    except Exception as e:
+        auth.add_credits(user["email"], COMBINE_COST)
+        raise HTTPException(502, f"Combine failed: {e}")
+    url = APP_URL.rstrip("/") + path
+    video = {"prompt": f"🎬 Combined ({len(clips)} clips): " + clips[0]["prompt"], "prediction_id": f"combined-{path.split('-')[-1].split('.')[0]}", "status": "succeeded", "url": url, "combined_from": [c["prediction_id"] for c in clips]}
+    auth.add_video(user["email"], video)
+    return {"url": url, "credits": user["credits"]}
 
 # ---- Billing ----
 @app.post("/api/checkout")
