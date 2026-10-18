@@ -94,7 +94,7 @@ def generate_video(prompt: str, duration: int = 5, aspect: str = "9:16") -> dict
             "prompt": prompt,
             "duration": dur,
             "aspect_ratio": aspect,
-            "quality": "720p",
+            "quality": "1080p",
         },
     )
     return {"id": prediction.id, "status": prediction.status}
