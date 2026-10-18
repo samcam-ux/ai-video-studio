@@ -191,7 +191,7 @@ def combine_videos(video_urls: list[str]) -> str:
         import shutil
         shutil.rmtree(tmpdir, ignore_errors=True)
 
-TEXT_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+TEXT_FONT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts", "DejaVuSans-Bold.ttf")
 
 def edit_video(video_url: str, edit_prompt: str, duration: int = 5, aspect: str = "9:16") -> dict:
     """
