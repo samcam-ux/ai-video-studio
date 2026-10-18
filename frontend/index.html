@@ -63,10 +63,10 @@
 <header>
   <div class="marquee"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
   <div class="brandrow">
-    <h1 class="brand bebas">AI VIDEO STUDIO<small> HOLLYWOOD IN YOUR POCKET </small></h1>
+    <h1 class="brand bebas">AI VIDEO STUDIO<small> VIDEO CONTENT FOR BUSINESS </small></h1>
     <div id="userbar" class="hidden">
       <span class="credits">🎟️ <b id="credCount">0</b> credits</span>
-      <button class="secondary" onclick="buyCredits()" style="padding:8px 14px;font-size:13px;margin-left:8px">Buy 20 — $9</button>
+      <button class="secondary" onclick="showSubModal()" style="padding:8px 14px;font-size:13px;margin-left:8px">⬆️ Upgrade</button>
       <button class="secondary" onclick="logout()" style="padding:8px 14px;font-size:13px;margin-left:4px">Logout</button>
     </div>
   </div>
@@ -74,20 +74,20 @@
 
 <div id="auth">
   <h2 class="bebas">AI VIDEO STUDIO</h2>
-  <p class="tagline">HOLLYWOOD IN YOUR POCKET</p>
-  <input id="email" type="email" placeholder="Email">
+  <p class="tagline">VIDEO CONTENT FOR BUSINESS</p>
+  <input id="email" type="email" placeholder="Work email">
   <input id="password" type="password" placeholder="Password">
   <div class="row" style="justify-content:center">
     <button onclick="doLogin()">Log in</button>
     <button class="secondary" onclick="doRegister()">Sign up (3 free)</button>
   </div>
   <p id="authErr" style="color:#f66;margin-top:12px"></p>
-  <p class="note" style="margin-top:24px">🎬 Turn a sentence into a movie scene.<br>$9 once — no subscription, ever.</p>
+  <p class="note" style="margin-top:24px">🎬 Turn a sentence into a professional video.<br>Built for realtors, builders, architects, engineers &amp; agencies.<br>Plans from $49/mo — cancel anytime.</p>
 </div>
 
 <main id="app" class="hidden">
   <div class="card gold">
-    <div class="bebas" style="font-size:22px;color:var(--gold);letter-spacing:3px;margin-bottom:10px">🎬 NEW PRODUCTION</div>
+    <div class="bebas" style="font-size:22px;color:var(--gold);letter-spacing:3px;margin-bottom:10px">🎬 NEW VIDEO</div>
     <textarea id="prompt" placeholder="Describe your scene… e.g. A drone shot flying over a neon city at night in the rain"></textarea>
     <div class="row">
       <select id="duration">
@@ -122,8 +122,8 @@
 
   <div class="filmstrip"></div>
 
-  <h3 class="section-title bebas">🔥 TRENDING NOW</h3>
-  <p class="section-sub">Viral formats blowing up on TikTok &amp; Reels — tap one to load it as your prompt.</p>
+  <h3 class="section-title bebas">🏢 INDUSTRY TEMPLATES</h3>
+  <p class="section-sub">Proven prompts for your trade — tap one to load it, customize, and generate.</p>
   <div class="trend-grid" id="trends"></div>
 
   <div class="filmstrip"></div>
@@ -134,16 +134,22 @@
 
 <!-- Subscription upsell modal: shown when free credits run out -->
 <div id="subModal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px">
-  <div class="card" style="max-width:420px;text-align:center;border:2px solid var(--gold)">
-    <div style="font-size:40px">🎬</div>
+  <div class="card" style="max-width:460px;text-align:center;border:2px solid var(--gold);max-height:90vh;overflow-y:auto">
+    <div style="font-size:40px">🏢</div>
     <h2 class="bebas" style="color:var(--gold);margin:8px 0">You're out of free videos!</h2>
-    <p style="color:#ccc">Your 3 free credits are used up. Keep creating with a monthly plan:</p>
-    <div style="background:#1c1c24;border:1px solid var(--gold-deep);border-radius:12px;padding:16px;margin:16px 0">
-      <div style="font-size:28px;color:var(--gold);font-weight:700">$19<span style="font-size:16px;color:#999">/month</span></div>
-      <div style="color:#ccc;margin-top:4px">60 videos every month<br><span style="font-size:13px;color:#888">Renews automatically. Cancel anytime.</span></div>
+    <p style="color:#ccc">Pick a business plan and keep creating:</p>
+    <div style="display:grid;gap:10px;margin:16px 0;text-align:left">
+      <div onclick="subscribe('starter')" style="background:#1c1c24;border:1px solid var(--gold-deep);border-radius:12px;padding:14px;cursor:pointer">
+        <div style="font-size:20px;color:var(--gold);font-weight:700">$49<span style="font-size:14px;color:#999">/mo</span> <span style="font-size:13px;color:#aaa">— Starter</span></div>
+        <div style="color:#ccc;font-size:14px">150 videos / month · 1 seat</div>
+      </div>
+      <div onclick="subscribe('professional')" style="background:#1c1c24;border:2px solid var(--gold);border-radius:12px;padding:14px;cursor:pointer">
+        <div style="font-size:20px;color:var(--gold);font-weight:700">$149<span style="font-size:14px;color:#999">/mo</span> <span style="font-size:13px;color:#aaa">— Professional ⭐</span></div>
+        <div style="color:#ccc;font-size:14px">500 videos / month · 3 seats · priority rendering</div>
+      </div>
     </div>
-    <button onclick="subscribe()" style="width:100%;font-size:17px;padding:14px">⭐ Start my first month</button>
-    <p style="margin-top:12px"><a href="#" onclick="closeSubModal();return false" style="color:#888;font-size:14px">No thanks, I'll just buy a $9 credit pack</a></p>
+    <p style="color:#888;font-size:13px">Renews automatically. Cancel anytime.<br>Need more? <a href="mailto:sam@yardhousedrafting.com" style="color:var(--gold)">Contact us for Enterprise</a>.</p>
+    <p><a href="#" onclick="closeSubModal();return false" style="color:#888;font-size:14px">No thanks, I'll just buy a $9 credit pack</a></p>
     <p id="subErr" style="color:#f66;font-size:13px"></p>
   </div>
 </div>
@@ -302,18 +308,18 @@ async function createFromUpload(){
   refresh();
 }
 const TRENDS = [
-  {tag:"POV", title:"Waterfall Drone Dive", prompt:"POV: you are a drone diving through a massive waterfall in slow motion, mist swirling, sunlight creating rainbows in the spray"},
-  {tag:"POV", title:"Neon Tokyo Rain Walk", prompt:"POV walking through a neon-lit Tokyo alley at night in the rain, glowing signs reflecting in puddles, cinematic"},
-  {tag:"SATISFYING", title:"Molten Gold Pour", prompt:"Molten gold being poured into intricate ice sculptures, steam exploding upward, ultra satisfying slow motion"},
-  {tag:"SATISFYING", title:"Bubble Pop Macro", prompt:"Giant iridescent soap bubbles popping in extreme slow motion macro, rainbow colors rippling"},
-  {tag:"TINY WORLD", title:"Sandwich Skyscraper Crew", prompt:"Tiny construction workers in hard hats building a sandwich the size of a skyscraper, cranes lifting lettuce, miniature world"},
-  {tag:"TINY WORLD", title:"Sundae Ski Slope", prompt:"Miniature people skiing down a giant ice cream sundae, chocolate sauce rivers, tiny world"},
-  {tag:"CINEMATIC", title:"Lion at Golden Hour", prompt:"A majestic lion with a flowing mane walking through tall golden grass at sunset, dust in the air, cinematic wildlife film"},
-  {tag:"CINEMATIC", title:"Octopus Shipwreck", prompt:"A giant octopus gracefully swimming through a sunken shipwreck, bioluminescent glow, deep ocean mystery"},
-  {tag:"FANTASY", title:"Castle Above Clouds", prompt:"A floating castle above the clouds at golden hour, waterfalls pouring off its edges into the sky, epic fantasy"},
-  {tag:"FANTASY", title:"Alien Garden", prompt:"An astronaut discovering a glowing alien garden on a purple planet, strange luminous plants, sci-fi wonder"},
-  {tag:"TRANSFORM", title:"Forging the Blade", prompt:"A blacksmith forging a glowing sword in a dark forge, sparks flying in slow motion, embers swirling"},
-  {tag:"TRANSFORM", title:"Day to Night City", prompt:"Time-lapse of a futuristic city transforming from day to night, windows lighting up one by one, traffic light trails"},
+  {tag:"REAL ESTATE", title:"Luxury Listing Tour", prompt:"Slow cinematic walkthrough of a luxury home interior, bright natural light through floor-to-ceiling windows, modern kitchen and living room, smooth gimbal movement, real estate showcase"},
+  {tag:"REAL ESTATE", title:"Aerial Property Reveal", prompt:"Drone shot rising over a suburban home at golden hour, revealing the full property, landscaped yard and neighborhood, warm inviting light, real estate marketing"},
+  {tag:"REAL ESTATE", title:"Neighborhood Lifestyle", prompt:"Sunny suburban street with families walking, kids biking, tree-lined sidewalks, parks and cafes nearby, aspirational neighborhood lifestyle video"},
+  {tag:"BUILDER", title:"Project Showcase", prompt:"Modern construction site with a nearly completed custom home, workers finishing exterior details, crane in background, professional construction showcase, clear blue sky"},
+  {tag:"BUILDER", title:"Before & After Vision", prompt:"Split transition from an empty dirt lot to a beautiful finished two-story home, time-lapse construction feel, dramatic reveal, home builder portfolio"},
+  {tag:"ARCHITECT", title:"Design Walkthrough", prompt:"Photorealistic architectural walkthrough of a modern minimalist home interior, concrete and warm wood materials, soft daylight, slow camera glide, design presentation quality"},
+  {tag:"ARCHITECT", title:"Concept at Dusk", prompt:"Modern commercial building exterior at dusk, warm interior lights glowing through glass facade, dramatic sky, architectural visualization, professional presentation"},
+  {tag:"ENGINEER", title:"Site Overview", prompt:"Aerial drone view of an active civil construction site, earthmovers grading land, surveyed grid lines visible, infrastructure project overview, professional documentation"},
+  {tag:"AGENCY", title:"Product Ad Spot", prompt:"Dynamic product showcase with dramatic studio lighting, product rotating on pedestal, light streaks and particles, premium commercial advertisement style"},
+  {tag:"AGENCY", title:"Brand Story Opener", prompt:"Cinematic opening shot of a bustling city at sunrise, people heading to work, energy and ambition, inspirational brand film opening, warm color grade"},
+  {tag:"AGENCY", title:"Social Hook", prompt:"Fast-paced montage of happy customers using a product, bright colors, quick cuts feel, upbeat social media ad style, vertical format energy"},
+  {tag:"ALL TRADES", title:"Team Intro", prompt:"Professional team walking toward camera in front of a modern office building, confident, smiling, golden hour light, company culture video"},
 ];
 function renderTrends(){
   const w = document.getElementById('trends');
@@ -346,16 +352,16 @@ async function buyCredits(){
 }
 function showSubModal(){ document.getElementById('subModal').classList.remove('hidden'); }
 function closeSubModal(){ document.getElementById('subModal').classList.add('hidden'); buyCredits(); }
-async function subscribe(){
+async function subscribe(tier){
   document.getElementById('subErr').textContent = '';
-  const {ok, j} = await api('/api/subscribe-checkout', {method:'POST'});
+  const {ok, j} = await api('/api/subscribe-checkout', {method:'POST', body: JSON.stringify({tier})});
   if (ok && j.url) location.href = j.url;
   else document.getElementById('subErr').textContent = j.detail || 'Could not start checkout';
 }
 // After returning from Stripe
 if (new URLSearchParams(location.search).get('subscribed') === '1') {
   history.replaceState(null, '', location.pathname);
-  setTimeout(() => { alert('🎉 Welcome! Your 60 monthly credits are ready.'); refresh(); }, 500);
+  setTimeout(() => { alert('🎉 Welcome! Your monthly video credits are ready.'); refresh(); }, 500);
 }
 async function upscale(pid){
   const err = document.getElementById('up-'+pid);

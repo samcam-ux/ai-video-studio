@@ -363,10 +363,15 @@ def checkout(authorization: str | None = Header(default=None)):
     return {"url": url}
 
 @app.post("/api/subscribe-checkout")
-def subscribe_checkout(authorization: str | None = Header(default=None)):
+async def subscribe_checkout(request: Request, authorization: str | None = Header(default=None)):
     user = _user_or_401(authorization)
     try:
-        url = billing.create_subscription_checkout(user["email"], APP_URL)
+        body = await request.json()
+    except Exception:
+        body = {}
+    tier = (body.get("tier") or "starter").lower()
+    try:
+        url = billing.create_subscription_checkout(user["email"], APP_URL, tier)
     except Exception as e:
         raise HTTPException(500, f"Subscription checkout error: {e}")
     return {"url": url}
@@ -399,9 +404,10 @@ async def webhook(request: Request):
     if sub:
         if sub["action"] == "activate" and sub["email"]:
             auth.set_subscription(sub["email"], sub["customer_id"], "active",
-                                  billing.SUBSCRIPTION_CREDITS)
+                                  sub.get("credits") or billing.SUBSCRIPTION_CREDITS)
         elif sub["action"] == "renew" and sub["email"]:
-            auth.add_credits(sub["email"], billing.SUBSCRIPTION_CREDITS)
+            # Renewal grants the tier's monthly credits; fall back to starter amount
+            auth.add_credits(sub["email"], billing.TIERS["starter"]["credits"])
         elif sub["action"] == "cancel" and sub["customer_id"]:
             # find user by customer id
             import sqlite3 as _sql
