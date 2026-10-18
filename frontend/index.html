@@ -132,6 +132,22 @@
   <div id="videos" class="video-grid"></div>
 </main>
 
+<!-- Subscription upsell modal: shown when free credits run out -->
+<div id="subModal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px">
+  <div class="card" style="max-width:420px;text-align:center;border:2px solid var(--gold)">
+    <div style="font-size:40px">🎬</div>
+    <h2 class="bebas" style="color:var(--gold);margin:8px 0">You're out of free videos!</h2>
+    <p style="color:#ccc">Your 3 free credits are used up. Keep creating with a monthly plan:</p>
+    <div style="background:#1c1c24;border:1px solid var(--gold-deep);border-radius:12px;padding:16px;margin:16px 0">
+      <div style="font-size:28px;color:var(--gold);font-weight:700">$19<span style="font-size:16px;color:#999">/month</span></div>
+      <div style="color:#ccc;margin-top:4px">60 videos every month<br><span style="font-size:13px;color:#888">Renews automatically. Cancel anytime.</span></div>
+    </div>
+    <button onclick="subscribe()" style="width:100%;font-size:17px;padding:14px">⭐ Start my first month</button>
+    <p style="margin-top:12px"><a href="#" onclick="closeSubModal();return false" style="color:#888;font-size:14px">No thanks, I'll just buy a $9 credit pack</a></p>
+    <p id="subErr" style="color:#f66;font-size:13px"></p>
+  </div>
+</div>
+
 <script>
 let token = localStorage.getItem('vstoken');
 const api = (p, o={}) => fetch(p, { ...o,
@@ -143,6 +159,11 @@ async function refresh() {
   if (!ok) { showAuth(); return; }
   document.getElementById('credCount').textContent = j.credits;
   showApp();
+  // Out of credits? Offer the monthly subscription (unless already subscribed)
+  if (j.credits <= 0) {
+    const s = await api('/api/subscription-status');
+    if (!s.ok || s.j.status !== 'active') showSubModal();
+  }
   const wrap = document.getElementById('videos');
   wrap.innerHTML = '';
   [...j.videos].reverse().forEach(v => {
@@ -322,6 +343,19 @@ async function generate(){
 async function buyCredits(){
   const {ok, j} = await api('/api/checkout', {method:'POST'});
   if (ok && j.url) location.href = j.url;
+}
+function showSubModal(){ document.getElementById('subModal').classList.remove('hidden'); }
+function closeSubModal(){ document.getElementById('subModal').classList.add('hidden'); buyCredits(); }
+async function subscribe(){
+  document.getElementById('subErr').textContent = '';
+  const {ok, j} = await api('/api/subscribe-checkout', {method:'POST'});
+  if (ok && j.url) location.href = j.url;
+  else document.getElementById('subErr').textContent = j.detail || 'Could not start checkout';
+}
+// After returning from Stripe
+if (new URLSearchParams(location.search).get('subscribed') === '1') {
+  history.replaceState(null, '', location.pathname);
+  setTimeout(() => { alert('🎉 Welcome! Your 60 monthly credits are ready.'); refresh(); }, 500);
 }
 async function upscale(pid){
   const err = document.getElementById('up-'+pid);

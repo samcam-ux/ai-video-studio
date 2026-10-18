@@ -34,7 +34,9 @@ def _init():
             pw_hash TEXT NOT NULL,
             salt TEXT NOT NULL,
             credits INTEGER NOT NULL DEFAULT 3,
-            created_at REAL NOT NULL
+            created_at REAL NOT NULL,
+            stripe_customer_id TEXT,
+            subscription_status TEXT
         );
         CREATE TABLE IF NOT EXISTS sessions (
             token TEXT PRIMARY KEY,
@@ -49,6 +51,13 @@ def _init():
         );
         CREATE INDEX IF NOT EXISTS idx_videos_email ON videos(email);
         """)
+        db.commit()
+        # Migrate existing DBs: add subscription columns if missing
+        for col in ("stripe_customer_id TEXT", "subscription_status TEXT"):
+            name = col.split()[0]
+            cur = db.execute("PRAGMA table_info(users)")
+            if name not in [r[1] for r in cur.fetchall()]:
+                db.execute(f"ALTER TABLE users ADD COLUMN {col}")
         db.commit()
         db.close()
 
@@ -218,3 +227,32 @@ def refund_if_failed(email: str, prediction_id: str) -> bool:
             return False
         finally:
             db.close()
+
+
+def set_subscription(email: str, customer_id: str, status: str, monthly_credits: int):
+    """Activate/update a subscription: set status and grant the month's credits."""
+    with _lock:
+        db = _db()
+        try:
+            db.execute(
+                "UPDATE users SET stripe_customer_id=?, subscription_status=?, credits = credits + ? WHERE email=?",
+                (customer_id, status, monthly_credits, email),
+            )
+            db.commit()
+        finally:
+            db.close()
+
+
+def cancel_subscription_status(email: str):
+    with _lock:
+        db = _db()
+        try:
+            db.execute("UPDATE users SET subscription_status='cancelled' WHERE email=?", (email,))
+            db.commit()
+        finally:
+            db.close()
+
+
+def get_subscription_status(email: str) -> str | None:
+    row = _get_user_row(email)
+    return row["subscription_status"] if row else None

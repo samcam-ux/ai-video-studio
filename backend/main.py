@@ -362,14 +362,54 @@ def checkout(authorization: str | None = Header(default=None)):
         raise HTTPException(500, f"Checkout error: {e}")
     return {"url": url}
 
+@app.post("/api/subscribe-checkout")
+def subscribe_checkout(authorization: str | None = Header(default=None)):
+    user = _user_or_401(authorization)
+    try:
+        url = billing.create_subscription_checkout(user["email"], APP_URL)
+    except Exception as e:
+        raise HTTPException(500, f"Subscription checkout error: {e}")
+    return {"url": url}
+
+@app.get("/api/subscription-status")
+def subscription_status(authorization: str | None = Header(default=None)):
+    user = _user_or_401(authorization)
+    return {"status": auth.get_subscription_status(user["email"])}
+
 @app.post("/api/stripe-webhook")
 async def webhook(request: Request):
     payload = await request.body()
     sig = request.headers.get("stripe-signature", "")
+    secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
     try:
-        result = billing.handle_webhook(payload, sig)
+        import stripe as _stripe
+        event = _stripe.Webhook.construct_event(payload, sig, secret)
     except Exception as e:
         raise HTTPException(400, f"Webhook error: {e}")
-    if result and result["email"]:
-        auth.add_credits(result["email"], result["credits"])
+    # One-time credit pack purchases
+    if event["type"] == "checkout.session.completed":
+        s = event["data"]["object"]
+        if s.get("metadata", {}).get("type") != "subscription":
+            email = s["metadata"].get("email")
+            credits = int(s["metadata"].get("credits", 0))
+            if email and credits:
+                auth.add_credits(email, credits)
+    # Subscription lifecycle
+    sub = billing.handle_subscription_webhook(event)
+    if sub:
+        if sub["action"] == "activate" and sub["email"]:
+            auth.set_subscription(sub["email"], sub["customer_id"], "active",
+                                  billing.SUBSCRIPTION_CREDITS)
+        elif sub["action"] == "renew" and sub["email"]:
+            auth.add_credits(sub["email"], billing.SUBSCRIPTION_CREDITS)
+        elif sub["action"] == "cancel" and sub["customer_id"]:
+            # find user by customer id
+            import sqlite3 as _sql
+            conn = _sql.connect(auth.DB_PATH, timeout=30)
+            row = conn.execute(
+                "SELECT email FROM users WHERE stripe_customer_id=?",
+                (sub["customer_id"],)).fetchone()
+            conn.close()
+            if row:
+                auth.cancel_subscription_status(row[0])
     return {"ok": True}
