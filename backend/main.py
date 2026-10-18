@@ -326,26 +326,6 @@ def create_from_upload(body: CreateFromUploadIn, authorization: str | None = Hea
     auth.add_video(user["email"], video)
     return {"prediction_id": pred["id"], "status": pred["status"], "credits": user["credits"]}
 
-# ---- One-time admin: wipe all accounts (owner-confirmed 2026-10-18) ----
-# Remove this endpoint after use.
-NUKE_SECRET = "be4a5a5b56c8e4fe5ba373f8f6ceacf5"
-
-@app.post("/api/admin/nuke-accounts")
-def nuke_accounts(body: dict):
-    import sqlite3 as sqlite3mod
-    if body.get("secret") != NUKE_SECRET:
-        raise HTTPException(403, "Forbidden")
-    conn = sqlite3mod.connect(auth.DB_PATH, timeout=30)
-    cur = conn.cursor()
-    counts = {}
-    for tbl in ("videos", "sessions", "users"):
-        cur.execute(f"SELECT COUNT(*) FROM {tbl}")
-        counts[tbl] = cur.fetchone()[0]
-        cur.execute(f"DELETE FROM {tbl}")
-    conn.commit()
-    conn.close()
-    return {"wiped": counts}
-
 class CombineIn(BaseModel):
     prediction_ids: list[str]
 
