@@ -1,6 +1,6 @@
 """AI Video Studio — text-to-video web app."""
 import os
-from fastapi import FastAPI, HTTPException, Header, Request
+from fastapi import FastAPI, HTTPException, Header, Request, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -259,6 +259,72 @@ def download_video(prediction_id: str, authorization: str | None = Header(defaul
     fname = f"ai-video-studio-{prediction_id[:8]}.mp4"
     return StreamingResponse(stream(), media_type="video/mp4",
                              headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+# ---- Upload your own photo/video ----
+UPLOAD_MAX_MB = 25
+IMAGE_EXTS = {"jpg", "jpeg", "png", "webp"}
+VIDEO_EXTS = {"mp4", "mov", "webm"}
+
+@app.post("/api/upload")
+async def upload_media(file: UploadFile = File(...), authorization: str | None = Header(default=None)):
+    import uuid as uuidmod
+    user = _user_or_401(authorization)
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower()
+    if ext in IMAGE_EXTS:
+        kind = "image"
+    elif ext in VIDEO_EXTS:
+        kind = "video"
+    else:
+        raise HTTPException(400, "Upload a JPG/PNG/WebP photo or MP4/MOV video")
+    data = await file.read()
+    if len(data) > UPLOAD_MAX_MB * 1024 * 1024:
+        raise HTTPException(400, f"File too large (max {UPLOAD_MAX_MB}MB)")
+    if len(data) == 0:
+        raise HTTPException(400, "Empty file")
+    fid = uuidmod.uuid4().hex[:12]
+    fname = f"upload-{fid}.{ext}"
+    fpath = os.path.join(video_gen.MEDIA_DIR, fname)
+    with open(fpath, "wb") as f:
+        f.write(data)
+    url = APP_URL.rstrip("/") + f"/media/{fname}"
+    return {"file_id": fid, "kind": kind, "url": url, "filename": file.filename}
+
+UPLOAD_CREATE_COST = 1
+
+class CreateFromUploadIn(BaseModel):
+    file_id: str
+    prompt: str
+    duration: int = 5
+
+@app.post("/api/create-from-upload")
+def create_from_upload(body: CreateFromUploadIn, authorization: str | None = Header(default=None)):
+    import glob as globmod
+    user = _user_or_401(authorization)
+    prompt = (body.prompt or "").strip()
+    if not prompt:
+        raise HTTPException(400, "Describe what should happen")
+    # find the uploaded file (must belong to this upload flow)
+    matches = globmod.glob(os.path.join(video_gen.MEDIA_DIR, f"upload-{body.file_id}.*"))
+    if not matches:
+        raise HTTPException(404, "Upload not found — please upload again")
+    fpath = matches[0]
+    ext = fpath.rsplit(".", 1)[-1].lower()
+    if not auth.spend_credit(user["email"]):
+        raise HTTPException(402, f"Creating from upload costs {UPLOAD_CREATE_COST} credit")
+    try:
+        if ext in IMAGE_EXTS:
+            image_url = APP_URL.rstrip("/") + f"/media/{os.path.basename(fpath)}"
+        else:
+            frame_path = video_gen.extract_frame_to_media(fpath)
+            image_url = APP_URL.rstrip("/") + frame_path
+        pred = video_gen.create_from_image(image_url, prompt, duration=body.duration)
+    except Exception as e:
+        auth.add_credits(user["email"], UPLOAD_CREATE_COST)
+        raise HTTPException(502, f"Video provider error: {e}")
+    video = {"prompt": prompt, "prediction_id": pred["id"], "status": pred["status"], "url": None,
+             "upload_from": body.file_id, "cost": UPLOAD_CREATE_COST}
+    auth.add_video(user["email"], video)
+    return {"prediction_id": pred["id"], "status": pred["status"], "credits": user["credits"]}
 
 class CombineIn(BaseModel):
     prediction_ids: list[str]

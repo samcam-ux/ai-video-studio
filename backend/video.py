@@ -193,6 +193,34 @@ def combine_videos(video_urls: list[str]) -> str:
 
 TEXT_FONT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts", "DejaVuSans-Bold.ttf")
 
+def create_from_image(image_url: str, prompt: str, duration: int = 5, aspect: str = "9:16") -> dict:
+    """
+    Generate a video from a user-supplied image URL + prompt (PixVerse image-to-video).
+    Returns the prediction record (async; caller polls).
+    """
+    dur = 8 if duration >= 10 else 5
+    prediction = _create_prediction(
+        DEFAULT_MODEL,
+        input={
+            "prompt": prompt,
+            "image": image_url,
+            "duration": dur,
+            "aspect_ratio": aspect,
+            "quality": "1080p",
+        },
+    )
+    return {"id": prediction.id, "status": prediction.status}
+
+def extract_frame_to_media(video_path: str) -> str:
+    """Extract first frame of a local video file into MEDIA_DIR. Returns /media/ URL path."""
+    frame_name = f"upframe-{uuid.uuid4().hex[:8]}.jpg"
+    frame_path = os.path.join(MEDIA_DIR, frame_name)
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", video_path, "-vframes", "1", "-q:v", "2", frame_path],
+        check=True, capture_output=True,
+    )
+    return f"/media/{frame_name}"
+
 def edit_video(video_url: str, edit_prompt: str, duration: int = 5, aspect: str = "9:16") -> dict:
     """
     AI-edit an existing video: extract its first frame and regenerate via

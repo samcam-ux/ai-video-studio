@@ -103,6 +103,23 @@
     <p id="genErr" style="color:#f66;margin-top:8px"></p>
   </div>
 
+  <div class="card">
+    <div class="bebas" style="font-size:22px;color:var(--gold);letter-spacing:3px;margin-bottom:6px">📤 START FROM YOUR OWN</div>
+    <p class="section-sub">Upload a photo to animate it, or a video to reimagine it with AI.</p>
+    <input type="file" id="uploadFile" accept="image/*,video/*" style="margin-bottom:10px" onchange="handleUpload(this)">
+    <div id="uploadPreview" style="margin-bottom:10px"></div>
+    <textarea id="uploadPrompt" placeholder="Describe what should happen… e.g. make the waves crash bigger" style="min-height:70px"></textarea>
+    <div class="row">
+      <select id="uploadDuration">
+        <option value="5">5 seconds</option>
+        <option value="10">10 seconds</option>
+      </select>
+      <button id="uploadBtn" onclick="createFromUpload()">✨ Animate (1 credit)</button>
+    </div>
+    <p id="uploadErr" style="color:#f66;margin-top:8px;font-size:13px"></p>
+    <p class="note">JPG/PNG/WebP photo or MP4/MOV video, max 25MB.</p>
+  </div>
+
   <div class="filmstrip"></div>
 
   <h3 class="section-title bebas">🔥 TRENDING NOW</h3>
@@ -152,13 +169,29 @@ async function refresh() {
   cbar.innerHTML = `<button onclick="combineSelected()">🎬 Combine selected into one video (1 credit)</button><p id="combineErr" style="font-size:12px;color:#f66"></p><p style="font-size:12px;color:#777">Pick 2–4 clips above, in order. They'll be stitched end-to-end.</p>`;
   document.querySelectorAll('[data-pid]').forEach(el => poll(el.dataset.pid, el));
 }
+const countdowns = {};
+function tickCountdown(pid, el){
+  if (!(pid in countdowns)) return;
+  const secs = countdowns[pid];
+  if (secs > 0) {
+    el.innerHTML = `🎬 <b style="font-size:20px;color:var(--gold)">`+secs+`</b> <span style="color:#8a8578">seconds…</span>`;
+    countdowns[pid]--;
+    setTimeout(() => tickCountdown(pid, el), 1000);
+  } else {
+    el.textContent = '🎬 Putting on the final touches…';
+    delete countdowns[pid];
+  }
+}
 async function poll(pid, el) {
   const {ok, j} = await api('/api/status/'+pid);
   if (!ok) return;
   const out = Array.isArray(j.output) ? j.output[0] : j.output;
-  if (j.status === 'succeeded' && out) { refresh(); }
-  else if (j.status === 'failed') { el.textContent = '❌ failed'; }
-  else setTimeout(() => poll(pid, el), 5000);
+  if (j.status === 'succeeded' && out) { delete countdowns[pid]; refresh(); }
+  else if (j.status === 'failed') { delete countdowns[pid]; el.textContent = '❌ failed'; }
+  else {
+    if (!(pid in countdowns)) { countdowns[pid] = 15; tickCountdown(pid, el); }
+    setTimeout(() => poll(pid, el), 5000);
+  }
 }
 function esc(s){ return (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function showAuth(){ document.getElementById('auth').classList.remove('hidden'); document.getElementById('app').classList.add('hidden'); document.getElementById('userbar').classList.add('hidden'); }
@@ -207,6 +240,45 @@ async function shareVideo(pid){
     if (e && e.name === 'AbortError') err.textContent = '';
     else err.textContent = 'Share failed — try Download instead.';
   }
+}
+let uploadedFileId = null;
+async function handleUpload(input){
+  const f = input.files[0];
+  if(!f) return;
+  const err = document.getElementById('uploadErr');
+  const prev = document.getElementById('uploadPreview');
+  err.textContent = 'Uploading…'; prev.innerHTML = '';
+  const fd = new FormData();
+  fd.append('file', f);
+  const r = await fetch('/api/upload', {method:'POST', body: fd,
+    headers: token ? {Authorization: 'Bearer '+token} : {}});
+  const j = await r.json();
+  if(!r.ok){ err.textContent = j.detail || 'Upload failed'; return; }
+  uploadedFileId = j.file_id;
+  err.textContent = '';
+  const url = URL.createObjectURL(f);
+  prev.innerHTML = j.kind === 'image'
+    ? `<img src="${url}" style="max-width:100%;max-height:220px;border-radius:10px;border:1px solid #333">`
+    : `<video src="${url}" controls playsinline style="max-width:100%;max-height:220px;border-radius:10px"></video>`;
+}
+async function createFromUpload(){
+  const err = document.getElementById('uploadErr');
+  const prompt = document.getElementById('uploadPrompt').value.trim();
+  if(!uploadedFileId){ err.textContent = 'Pick a photo or video first.'; return; }
+  if(!prompt){ err.textContent = 'Describe what should happen.'; return; }
+  const duration = parseInt(document.getElementById('uploadDuration').value);
+  err.textContent = ''; err.style.color = '#8a8578';
+  err.textContent = 'Dreaming it up… (1–3 min)';
+  const {ok, j} = await api('/api/create-from-upload', {method:'POST',
+    body: JSON.stringify({file_id: uploadedFileId, prompt, duration})});
+  err.style.color = '#f66';
+  if(!ok){ err.textContent = j.detail || 'Failed'; return; }
+  err.textContent = '';
+  document.getElementById('uploadPrompt').value = '';
+  document.getElementById('uploadPreview').innerHTML = '';
+  document.getElementById('uploadFile').value = '';
+  uploadedFileId = null;
+  refresh();
 }
 const TRENDS = [
   {tag:"POV", title:"Waterfall Drone Dive", prompt:"POV: you are a drone diving through a massive waterfall in slow motion, mist swirling, sunlight creating rainbows in the spray"},
