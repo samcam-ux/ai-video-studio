@@ -170,7 +170,7 @@ def combine_videos(video_urls: list[str]) -> str:
         for i, p in enumerate(parts):
             n = os.path.join(tmpdir, f"norm{i}.mp4")
             subprocess.run(
-                ["ffmpeg", "-y", "-i", p, "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                ["ffmpeg", "-y", "-i", p, "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
                  "-c:a", "aac", "-shortest", n],
                 check=True, capture_output=True,
             )
@@ -237,6 +237,9 @@ def add_text_overlay(video_url: str, text: str, position: str = "bottom") -> str
         raise ValueError("Text is empty")
     safe = text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'").replace("%", "\\%")
     y_expr = {"top": "80", "center": "(h-text_h)/2", "bottom": "h-text_h-80"}.get(position, "h-text_h-80")
+    # fall back gracefully if the DejaVu font isn't where we expect
+    font = TEXT_FONT if os.path.exists(TEXT_FONT) else ""
+    font_part = f"fontfile={font}:" if font else ""
     tmpdir = tempfile.mkdtemp()
     try:
         src = os.path.join(tmpdir, "src.mp4")
@@ -244,15 +247,18 @@ def add_text_overlay(video_url: str, text: str, position: str = "bottom") -> str
         out_name = f"text-{uuid.uuid4().hex[:8]}.mp4"
         out_path = os.path.join(MEDIA_DIR, out_name)
         vf = (
-            f"drawtext=fontfile={TEXT_FONT}:text='{safe}':fontsize=56:"
+            f"drawtext={font_part}text='{safe}':fontsize=56:"
             f"fontcolor=white:borderw=3:bordercolor=black:"
             f"x=(w-text_w)/2:y={y_expr}"
         )
-        subprocess.run(
+        proc = subprocess.run(
             ["ffmpeg", "-y", "-i", src, "-vf", vf,
-             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "copy", out_path],
-            check=True, capture_output=True,
+             "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+             "-c:a", "copy", out_path],
+            capture_output=True, text=True,
         )
+        if proc.returncode != 0:
+            raise RuntimeError(f"ffmpeg failed: {proc.stderr[-500:]}")
         return f"/media/{out_name}"
     finally:
         import shutil
