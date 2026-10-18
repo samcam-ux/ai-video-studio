@@ -181,6 +181,37 @@ def dialogue(body: DialogueIn, authorization: str | None = Header(default=None))
 # ---- Combine clips into longer video ----
 COMBINE_COST = 1
 
+# ---- Text overlay on video ----
+TEXT_COST = 1
+
+class TextIn(BaseModel):
+    prediction_id: str
+    text: str
+    position: str = "bottom"
+
+@app.post("/api/text-overlay")
+def text_overlay(body: TextIn, authorization: str | None = Header(default=None)):
+    user = _user_or_401(authorization)
+    src = next((x for x in user["videos"] if x.get("prediction_id") == body.prediction_id and x.get("url")), None)
+    if not src:
+        raise HTTPException(404, "Finished video not found")
+    text = (body.text or "").strip()[:120]
+    if not text:
+        raise HTTPException(400, "Type some text first")
+    if body.position not in ("top", "center", "bottom"):
+        raise HTTPException(400, "Position must be top, center, or bottom")
+    if not auth.spend_credit(user["email"]):
+        raise HTTPException(402, f"Text overlay costs {TEXT_COST} credit")
+    try:
+        path = video_gen.add_text_overlay(src["url"], text, body.position)
+    except Exception as e:
+        auth.add_credits(user["email"], TEXT_COST)
+        raise HTTPException(502, f"Text overlay failed: {e}")
+    url = APP_URL.rstrip("/") + path
+    video = {"prompt": f"📝 {src['prompt']}", "overlay_text": text, "prediction_id": f"text-{path.split('-')[-1].split('.')[0]}", "status": "succeeded", "url": url, "text_from": src["prediction_id"], "cost": TEXT_COST}
+    auth.add_video(user["email"], video)
+    return {"url": url, "credits": user["credits"]}
+
 class CombineIn(BaseModel):
     prediction_ids: list[str]
 

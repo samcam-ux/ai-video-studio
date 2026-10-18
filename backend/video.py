@@ -186,6 +186,39 @@ def combine_videos(video_urls: list[str]) -> str:
         import shutil
         shutil.rmtree(tmpdir, ignore_errors=True)
 
+TEXT_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+def add_text_overlay(video_url: str, text: str, position: str = "bottom") -> str:
+    """
+    Burn text onto a video with ffmpeg drawtext (white with black outline).
+    Returns the public /media/ URL path of the new file.
+    """
+    text = (text or "").strip()[:120]
+    if not text:
+        raise ValueError("Text is empty")
+    safe = text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'").replace("%", "\\%")
+    y_expr = {"top": "80", "center": "(h-text_h)/2", "bottom": "h-text_h-80"}.get(position, "h-text_h-80")
+    tmpdir = tempfile.mkdtemp()
+    try:
+        src = os.path.join(tmpdir, "src.mp4")
+        urllib.request.urlretrieve(video_url, src)
+        out_name = f"text-{uuid.uuid4().hex[:8]}.mp4"
+        out_path = os.path.join(MEDIA_DIR, out_name)
+        vf = (
+            f"drawtext=fontfile={TEXT_FONT}:text='{safe}':fontsize=56:"
+            f"fontcolor=white:borderw=3:bordercolor=black:"
+            f"x=(w-text_w)/2:y={y_expr}"
+        )
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", src, "-vf", vf,
+             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "copy", out_path],
+            check=True, capture_output=True,
+        )
+        return f"/media/{out_name}"
+    finally:
+        import shutil
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
 def add_dialogue(video_url: str, text: str) -> dict:
     """
     Two-step: TTS the dialogue text, then lip-sync it onto the video.
