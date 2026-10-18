@@ -1,7 +1,7 @@
 """AI Video Studio — text-to-video web app."""
 import os
 from fastapi import FastAPI, HTTPException, Header, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -239,6 +239,26 @@ def edit_video_ep(body: EditIn, authorization: str | None = Header(default=None)
     video = {"prompt": prompt, "prediction_id": pred["id"], "status": pred["status"], "url": None, "edit_from": src["prediction_id"], "edit_source_prompt": src["prompt"], "cost": EDIT_COST}
     auth.add_video(user["email"], video)
     return {"prediction_id": pred["id"], "status": pred["status"], "credits": user["credits"]}
+
+# ---- Download / share: proxy the video file (same-origin, no CORS issues) ----
+@app.get("/api/download")
+def download_video(prediction_id: str, authorization: str | None = Header(default=None)):
+    import urllib.request
+    user = _user_or_401(authorization)
+    v = next((x for x in user["videos"] if x.get("prediction_id") == prediction_id and x.get("url")), None)
+    if not v:
+        raise HTTPException(404, "Video not found")
+    url = v["url"]
+    def stream():
+        with urllib.request.urlopen(url, timeout=120) as r:
+            while True:
+                chunk = r.read(65536)
+                if not chunk:
+                    break
+                yield chunk
+    fname = f"ai-video-studio-{prediction_id[:8]}.mp4"
+    return StreamingResponse(stream(), media_type="video/mp4",
+                             headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 class CombineIn(BaseModel):
     prediction_ids: list[str]

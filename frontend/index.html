@@ -131,7 +131,12 @@ async function refresh() {
   [...j.videos].reverse().forEach(v => {
     const d = document.createElement('div');
     d.className = 'video-item card';
-    if (v.url) d.innerHTML = `<video src="${v.url}" controls playsinline></video><p>${esc(v.prompt)}</p>` + (v.overlay_text ? `<p style="font-size:12px;color:#777">📝 "${esc(v.overlay_text)}"</p>` : '') + (v.edit_from ? `<p style="font-size:12px;color:#777">✏️ Edit: ${esc(v.prompt)}</p>` : '') + (v.enhanced_prompt && v.enhanced_prompt !== v.prompt ? `<p style="font-size:12px;color:#777">✨ ${esc(v.enhanced_prompt)}</p>` : '') + (v.dialogue ? `<p style="font-size:12px;color:#777">🗣️ "${esc(v.dialogue)}"</p>` : '') + `<label style="font-size:13px;display:flex;align-items:center;gap:6px;margin-top:8px"><input type="checkbox" class="combine-check" value="${v.prediction_id}"> Select for combine</label><button class="secondary" style="margin-top:8px;font-size:13px;padding:8px 14px" onclick="upscale('${v.prediction_id}')">⬆️ Enhance to 4K (2 credits)</button><p id="up-${v.prediction_id}" style="font-size:12px;color:#f66"></p><div style="margin-top:8px"><input id="dg-${v.prediction_id}" placeholder="Dialogue for character to speak…" style="font-size:13px;padding:8px"><button class="secondary" style="font-size:13px;padding:8px 14px" onclick="addDialogue('${v.prediction_id}')">🗣️ Add dialogue (2 credits)</button><p id="dgerr-${v.prediction_id}" style="font-size:12px;color:#f66"></p></div><div style="margin-top:8px"><input id="tx-${v.prediction_id}" placeholder="Text to burn onto video…" maxlength="120" style="font-size:13px;padding:8px"><select id="txpos-${v.prediction_id}" style="font-size:13px;padding:8px;margin-left:4px"><option value="top">Top</option><option value="bottom" selected>Bottom</option><option value="center">Center</option></select> <button class="secondary" style="font-size:13px;padding:8px 14px" onclick="addText('${v.prediction_id}')">📝 Add text (1 credit)</button><p id="txerr-${v.prediction_id}" style="font-size:12px;color:#f66"></p></div><div style="margin-top:8px"><input id="ed-${v.prediction_id}" placeholder="Describe the change… e.g. make it sunset" style="font-size:13px;padding:8px"><button class="secondary" style="font-size:13px;padding:8px 14px" onclick="editVideo('${v.prediction_id}')">✏️ Edit video (1 credit)</button><p id="ederr-${v.prediction_id}" style="font-size:12px;color:#f66"></p></div>`;
+    if (v.url) d.innerHTML = `<video src="${v.url}" controls playsinline></video>
+<div class="row" style="margin-top:8px">
+  <button class="secondary" style="font-size:13px;padding:8px 16px" onclick="downloadVideo('${v.prediction_id}')">⬇️ Download</button>
+  <button class="secondary" style="font-size:13px;padding:8px 16px" onclick="shareVideo('${v.prediction_id}')">📤 Share</button>
+</div>
+<p id="share-${v.prediction_id}" style="font-size:12px;color:#f66"></p><p>${esc(v.prompt)}</p>` + (v.overlay_text ? `<p style="font-size:12px;color:#777">📝 "${esc(v.overlay_text)}"</p>` : '') + (v.edit_from ? `<p style="font-size:12px;color:#777">✏️ Edit: ${esc(v.prompt)}</p>` : '') + (v.enhanced_prompt && v.enhanced_prompt !== v.prompt ? `<p style="font-size:12px;color:#777">✨ ${esc(v.enhanced_prompt)}</p>` : '') + (v.dialogue ? `<p style="font-size:12px;color:#777">🗣️ "${esc(v.dialogue)}"</p>` : '') + `<label style="font-size:13px;display:flex;align-items:center;gap:6px;margin-top:8px"><input type="checkbox" class="combine-check" value="${v.prediction_id}"> Select for combine</label><button class="secondary" style="margin-top:8px;font-size:13px;padding:8px 14px" onclick="upscale('${v.prediction_id}')">⬆️ Enhance to 4K (2 credits)</button><p id="up-${v.prediction_id}" style="font-size:12px;color:#f66"></p><div style="margin-top:8px"><input id="dg-${v.prediction_id}" placeholder="Dialogue for character to speak…" style="font-size:13px;padding:8px"><button class="secondary" style="font-size:13px;padding:8px 14px" onclick="addDialogue('${v.prediction_id}')">🗣️ Add dialogue (2 credits)</button><p id="dgerr-${v.prediction_id}" style="font-size:12px;color:#f66"></p></div><div style="margin-top:8px"><input id="tx-${v.prediction_id}" placeholder="Text to burn onto video…" maxlength="120" style="font-size:13px;padding:8px"><select id="txpos-${v.prediction_id}" style="font-size:13px;padding:8px;margin-left:4px"><option value="top">Top</option><option value="bottom" selected>Bottom</option><option value="center">Center</option></select> <button class="secondary" style="font-size:13px;padding:8px 14px" onclick="addText('${v.prediction_id}')">📝 Add text (1 credit)</button><p id="txerr-${v.prediction_id}" style="font-size:12px;color:#f66"></p></div><div style="margin-top:8px"><input id="ed-${v.prediction_id}" placeholder="Describe the change… e.g. make it sunset" style="font-size:13px;padding:8px"><button class="secondary" style="font-size:13px;padding:8px 14px" onclick="editVideo('${v.prediction_id}')">✏️ Edit video (1 credit)</button><p id="ederr-${v.prediction_id}" style="font-size:12px;color:#f66"></p></div>`;
     else d.innerHTML = `<p>${esc(v.prompt)}</p>` + (v.overlay_text ? `<p style="font-size:12px;color:#777">📝 "${esc(v.overlay_text)}"</p>` : '') + (v.edit_from ? `<p style="font-size:12px;color:#777">✏️ Edit: ${esc(v.prompt)}</p>` : '') + `<p class="status" data-pid="${v.prediction_id}">⏳ ${esc(v.status||'rendering')}…</p>`;
     wrap.appendChild(d);
   });
@@ -167,6 +172,42 @@ async function doAuth(path){
   token = j.token; localStorage.setItem('vstoken', token); refresh();
 }
 function logout(){ localStorage.removeItem('vstoken'); token = null; showAuth(); }
+async function fetchVideoBlob(pid){
+  const r = await fetch('/api/download?prediction_id='+encodeURIComponent(pid),
+    {headers: token ? {Authorization: 'Bearer '+token} : {}});
+  if(!r.ok) throw new Error('Download failed');
+  return await r.blob();
+}
+async function downloadVideo(pid){
+  const err = document.getElementById('share-'+pid);
+  err.textContent = 'Preparing download…';
+  try {
+    const blob = await fetchVideoBlob(pid);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'ai-video-studio-'+pid.slice(0,8)+'.mp4';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+    err.textContent = '';
+  } catch(e){ err.textContent = 'Download failed — try again.'; }
+}
+async function shareVideo(pid){
+  const err = document.getElementById('share-'+pid);
+  err.textContent = 'Preparing…';
+  try {
+    const blob = await fetchVideoBlob(pid);
+    const file = new File([blob], 'ai-video.mp4', {type: 'video/mp4'});
+    if (navigator.canShare && navigator.canShare({files:[file]})) {
+      await navigator.share({files:[file], title:'My AI video'});
+      err.textContent = '';
+    } else {
+      err.textContent = 'Sharing not supported here — use Download, then post from your camera roll.';
+    }
+  } catch(e){
+    if (e && e.name === 'AbortError') err.textContent = '';
+    else err.textContent = 'Share failed — try Download instead.';
+  }
+}
 const TRENDS = [
   {tag:"POV", title:"Waterfall Drone Dive", prompt:"POV: you are a drone diving through a massive waterfall in slow motion, mist swirling, sunlight creating rainbows in the spray"},
   {tag:"POV", title:"Neon Tokyo Rain Walk", prompt:"POV walking through a neon-lit Tokyo alley at night in the rain, glowing signs reflecting in puddles, cinematic"},
