@@ -188,6 +188,40 @@ def combine_videos(video_urls: list[str]) -> str:
 
 TEXT_FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
+def edit_video(video_url: str, edit_prompt: str, duration: int = 5, aspect: str = "9:16") -> dict:
+    """
+    AI-edit an existing video: extract its first frame and regenerate via
+    PixVerse image-to-video with the edit description as the prompt.
+    Returns the prediction record (async; caller polls).
+    """
+    import base64
+    dur = 8 if duration >= 10 else 5
+    tmpdir = tempfile.mkdtemp()
+    try:
+        src = os.path.join(tmpdir, "src.mp4")
+        urllib.request.urlretrieve(video_url, src)
+        frame = os.path.join(tmpdir, "frame.jpg")
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", src, "-vframes", "1", "-q:v", "2", frame],
+            check=True, capture_output=True,
+        )
+        with open(frame, "rb") as f:
+            data_uri = "data:image/jpeg;base64," + base64.b64encode(f.read()).decode()
+        prediction = _create_prediction(
+            DEFAULT_MODEL,
+            input={
+                "prompt": edit_prompt,
+                "image": data_uri,
+                "duration": dur,
+                "aspect_ratio": aspect,
+                "quality": "1080p",
+            },
+        )
+        return {"id": prediction.id, "status": prediction.status}
+    finally:
+        import shutil
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
 def add_text_overlay(video_url: str, text: str, position: str = "bottom") -> str:
     """
     Burn text onto a video with ffmpeg drawtext (white with black outline).

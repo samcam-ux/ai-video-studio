@@ -212,6 +212,34 @@ def text_overlay(body: TextIn, authorization: str | None = Header(default=None))
     auth.add_video(user["email"], video)
     return {"url": url, "credits": user["credits"]}
 
+# ---- AI edit an existing video ----
+EDIT_COST = 1
+
+class EditIn(BaseModel):
+    prediction_id: str
+    edit_prompt: str
+    duration: int = 5
+
+@app.post("/api/edit-video")
+def edit_video_ep(body: EditIn, authorization: str | None = Header(default=None)):
+    user = _user_or_401(authorization)
+    src = next((x for x in user["videos"] if x.get("prediction_id") == body.prediction_id and x.get("url")), None)
+    if not src:
+        raise HTTPException(404, "Finished video not found")
+    prompt = (body.edit_prompt or "").strip()
+    if not prompt:
+        raise HTTPException(400, "Describe the change first")
+    if not auth.spend_credit(user["email"]):
+        raise HTTPException(402, f"Video edit costs {EDIT_COST} credit")
+    try:
+        pred = video_gen.edit_video(src["url"], prompt, duration=body.duration)
+    except Exception as e:
+        auth.add_credits(user["email"], EDIT_COST)
+        raise HTTPException(502, f"Video provider error: {e}")
+    video = {"prompt": prompt, "prediction_id": pred["id"], "status": pred["status"], "url": None, "edit_from": src["prediction_id"], "edit_source_prompt": src["prompt"], "cost": EDIT_COST}
+    auth.add_video(user["email"], video)
+    return {"prediction_id": pred["id"], "status": pred["status"], "credits": user["credits"]}
+
 class CombineIn(BaseModel):
     prediction_ids: list[str]
 
