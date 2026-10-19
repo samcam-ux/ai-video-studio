@@ -75,12 +75,45 @@
 <div id="auth">
   <h2 class="bebas">AI VIDEO STUDIO</h2>
   <p class="tagline">VIDEO CONTENT FOR BUSINESS</p>
-  <input id="email" type="email" placeholder="Work email">
-  <input id="password" type="password" placeholder="Password">
-  <div class="row" style="justify-content:center">
-    <button onclick="doLogin()">Log in</button>
-    <button class="secondary" onclick="doRegister()">Sign up (3 free)</button>
+
+  <!-- Login view -->
+  <div id="loginView">
+    <input id="email" type="email" placeholder="Work email">
+    <input id="password" type="password" placeholder="Password">
+    <div class="row" style="justify-content:center">
+      <button onclick="doLogin()">Log in</button>
+    </div>
+    <p style="margin-top:14px;font-size:14px;color:#999">New here? <a href="#" onclick="showRegister();return false" style="color:var(--gold)">Create your business account</a></p>
   </div>
+
+  <!-- Register view -->
+  <div id="registerView" class="hidden">
+    <input id="regName" type="text" placeholder="Full name">
+    <input id="regEmail" type="email" placeholder="Work email">
+    <input id="regPassword" type="password" placeholder="Password (min 6 characters)">
+    <input id="regCompany" type="text" placeholder="Company name">
+    <select id="regIndustry" style="width:100%;padding:12px;margin:6px 0;border-radius:8px;background:#1c1c24;color:#eee;border:1px solid #333;font-size:15px">
+      <option value="">Select your industry…</option>
+      <option value="real-estate">🏠 Real Estate</option>
+      <option value="builder">🏗️ Builder / Construction</option>
+      <option value="architect">📐 Architect / Engineer</option>
+      <option value="agency">📣 Marketing Agency</option>
+      <option value="other">Other</option>
+    </select>
+    <select id="regTeamSize" style="width:100%;padding:12px;margin:6px 0;border-radius:8px;background:#1c1c24;color:#eee;border:1px solid #333;font-size:15px">
+      <option value="">Team size…</option>
+      <option value="1">Just me</option>
+      <option value="2-10">2 – 10</option>
+      <option value="11-50">11 – 50</option>
+      <option value="51-200">51 – 200</option>
+      <option value="200+">200+</option>
+    </select>
+    <div class="row" style="justify-content:center;margin-top:8px">
+      <button onclick="doRegister()">Create account — 3 free videos</button>
+    </div>
+    <p style="margin-top:14px;font-size:14px;color:#999">Already have an account? <a href="#" onclick="showLogin();return false" style="color:var(--gold)">Log in</a></p>
+  </div>
+
   <p id="authErr" style="color:#f66;margin-top:12px"></p>
   <p class="note" style="margin-top:24px">🎬 Turn a sentence into a professional video.<br>Built for realtors, builders, architects, engineers &amp; agencies.<br>Plans from $49/mo — cancel anytime.</p>
 </div>
@@ -223,7 +256,23 @@ async function poll(pid, el) {
 function esc(s){ return (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function showAuth(){ document.getElementById('auth').classList.remove('hidden'); document.getElementById('app').classList.add('hidden'); document.getElementById('userbar').classList.add('hidden'); }
 function showApp(){ document.getElementById('auth').classList.add('hidden'); document.getElementById('app').classList.remove('hidden'); document.getElementById('userbar').classList.remove('hidden'); }
-async function doRegister(){ await doAuth('/api/register'); }
+function showRegister(){ document.getElementById('loginView').classList.add('hidden'); document.getElementById('registerView').classList.remove('hidden'); document.getElementById('authErr').textContent=''; }
+function showLogin(){ document.getElementById('registerView').classList.add('hidden'); document.getElementById('loginView').classList.remove('hidden'); document.getElementById('authErr').textContent=''; }
+async function doRegister(){
+  const name = document.getElementById('regName').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
+  const password = document.getElementById('regPassword').value;
+  const company = document.getElementById('regCompany').value.trim();
+  const industry = document.getElementById('regIndustry').value;
+  const team_size = document.getElementById('regTeamSize').value;
+  const err = document.getElementById('authErr');
+  if (!name) { err.textContent = 'Please enter your name'; return; }
+  if (!email) { err.textContent = 'Please enter your work email'; return; }
+  if (!password || password.length < 6) { err.textContent = 'Password must be at least 6 characters'; return; }
+  const {ok, j} = await api('/api/register', {method:'POST', body: JSON.stringify({email, password, name, company, industry, team_size})});
+  if (!ok) { err.textContent = j.detail || 'Error'; return; }
+token=<redacted>
+}
 async function doLogin(){ await doAuth('/api/login'); }
 async function doAuth(path){
   const email = document.getElementById('email').value, password = document.getElementById('password').value;

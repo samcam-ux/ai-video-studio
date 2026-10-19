@@ -36,11 +36,17 @@ def health():
 class RegisterIn(BaseModel):
     email: str
     password: str
+    name: str | None = None
+    company: str | None = None
+    industry: str | None = None
+    team_size: str | None = None
 
 @app.post("/api/register")
 def register(body: RegisterIn):
     try:
-        return auth.register(body.email, body.password)
+        return auth.register(body.email, body.password, name=body.name,
+                             company=body.company, industry=body.industry,
+                             team_size=body.team_size)
     except ValueError as e:
         raise HTTPException(400, str(e))
 

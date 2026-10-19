@@ -36,7 +36,11 @@ def _init():
             credits INTEGER NOT NULL DEFAULT 3,
             created_at REAL NOT NULL,
             stripe_customer_id TEXT,
-            subscription_status TEXT
+            subscription_status TEXT,
+            name TEXT,
+            company TEXT,
+            industry TEXT,
+            team_size TEXT
         );
         CREATE TABLE IF NOT EXISTS sessions (
             token TEXT PRIMARY KEY,
@@ -52,8 +56,9 @@ def _init():
         CREATE INDEX IF NOT EXISTS idx_videos_email ON videos(email);
         """)
         db.commit()
-        # Migrate existing DBs: add subscription columns if missing
-        for col in ("stripe_customer_id TEXT", "subscription_status TEXT"):
+        # Migrate existing DBs: add subscription + profile columns if missing
+        for col in ("stripe_customer_id TEXT", "subscription_status TEXT",
+                    "name TEXT", "company TEXT", "industry TEXT", "team_size TEXT"):
             name = col.split()[0]
             cur = db.execute("PRAGMA table_info(users)")
             if name not in [r[1] for r in cur.fetchall()]:
@@ -94,10 +99,14 @@ def _user_dict(row):
     }
 
 
-def register(email: str, password: str) -> dict:
+def register(email: str, password: str, name: str | None = None,
+             company: str | None = None, industry: str | None = None,
+             team_size: str | None = None) -> dict:
     email = email.strip().lower()
     if not email or not password:
         raise ValueError("Email and password required")
+    if len(password) < 6:
+        raise ValueError("Password must be at least 6 characters")
     if _get_user_row(email):
         raise ValueError("Account already exists")
     salt = secrets.token_hex(16)
@@ -106,8 +115,9 @@ def register(email: str, password: str) -> dict:
         db = _db()
         try:
             db.execute(
-                "INSERT INTO users (email, pw_hash, salt, credits, created_at) VALUES (?,?,?,?,?)",
-                (email, _hash(password, salt), salt, FREE_CREDITS, time.time()),
+                "INSERT INTO users (email, pw_hash, salt, credits, created_at, name, company, industry, team_size) VALUES (?,?,?,?,?,?,?,?,?)",
+                (email, _hash(password, salt), salt, FREE_CREDITS, time.time(),
+                 name, company, industry, team_size),
             )
             db.execute(
                 "INSERT INTO sessions (token, email, created_at) VALUES (?,?,?)",
