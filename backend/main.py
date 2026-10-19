@@ -362,6 +362,26 @@ def checkout(authorization: str | None = Header(default=None)):
         raise HTTPException(500, f"Checkout error: {e}")
     return {"url": url}
 
+# ---- One-time admin: wipe all accounts (owner-confirmed 2026-10-18) ----
+# Remove this endpoint after use.
+NUKE_SECRET = "f41e96cdde637fe70c2f52ab07b0e6d1"
+
+@app.post("/api/admin/nuke-accounts")
+def nuke_accounts(body: dict):
+    import sqlite3 as sqlite3mod
+    if body.get("secret") != NUKE_SECRET:
+        raise HTTPException(403, "Forbidden")
+    conn = sqlite3mod.connect(auth.DB_PATH, timeout=30)
+    cur = conn.cursor()
+    counts = {}
+    for tbl in ("videos", "sessions", "users"):
+        cur.execute(f"SELECT COUNT(*) FROM {tbl}")
+        counts[tbl] = cur.fetchone()[0]
+        cur.execute(f"DELETE FROM {tbl}")
+    conn.commit()
+    conn.close()
+    return {"wiped": counts}
+
 @app.post("/api/subscribe-checkout")
 async def subscribe_checkout(request: Request, authorization: str | None = Header(default=None)):
     user = _user_or_401(authorization)
